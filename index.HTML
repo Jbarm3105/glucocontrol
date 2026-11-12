@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#087f73">
+<link rel="manifest" href="manifest.json">
+<title>GlucoControl</title>
+<style>
+:root{--p:#087f73;--bg:#f4f7f7;--card:#fff;--txt:#17302e;--mut:#607572;--danger:#b42318}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:var(--txt)}
+header{background:var(--p);color:#fff;padding:20px 18px 16px;position:sticky;top:0;z-index:5}
+header h1{margin:0;font-size:24px}header small{opacity:.9}
+main{max-width:760px;margin:auto;padding:16px 16px 90px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #d8e3e1;display:flex;justify-content:space-around;padding:7px 3px calc(7px + env(safe-area-inset-bottom));z-index:10}
+nav button{border:0;background:none;color:#607572;font-size:11px;padding:5px 7px}nav button.active{color:var(--p);font-weight:700}
+.card{background:var(--card);border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 2px 10px #0000000d}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{padding:14px;border-radius:14px;background:#e8f4f2}
+.stat b{display:block;font-size:23px}.muted{color:var(--mut);font-size:13px}
+button,.btn{border:0;border-radius:12px;padding:11px 15px;background:var(--p);color:#fff;font-weight:650}
+.secondary{background:#e8f4f2;color:var(--p)}.danger{background:#fff0ef;color:var(--danger)}
+input,select,textarea{width:100%;padding:12px;border:1px solid #c9d8d6;border-radius:10px;background:#fff;font:inherit;margin:5px 0 10px}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.item{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #e5eceb}.item:last-child{border-bottom:0}
+h2{margin:5px 0 12px;font-size:20px}.empty{text-align:center;padding:30px;color:var(--mut)}
+.toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:#17302e;color:#fff;padding:10px 14px;border-radius:12px;display:none;z-index:20}
+@media(min-width:650px){main{padding-bottom:30px}nav{position:static;max-width:760px;margin:auto;border:0;border-radius:0}}
+</style>
+</head>
+<body>
+<header><h1>GlucoControl</h1><small>Seguimiento de diabetes · sin cálculo de dosis ni recomendaciones de tratamiento</small></header>
+<main id="app"></main>
+<nav id="nav"></nav>
+<div id="toast" class="toast"></div>
+<script>
+const KEY='glucocontrol_v1';
+let db=JSON.parse(localStorage.getItem(KEY)||'{"glucose":[],"meds":[],"food":[],"activity":[],"appointments":[],"documents":[],"profile":{}}');
+function save(){localStorage.setItem(KEY,JSON.stringify(db))}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function toast(s){const e=document.getElementById('toast');e.textContent=s;e.style.display='block';setTimeout(()=>e.style.display='none',1800)}
+const tabs=[['home','Inicio','⌂'],['glucose','Glucosa','♥'],['records','Registros','☷'],['agenda','Agenda','□'],['docs','Documentos','▣'],['settings','Ajustes','⚙']];
+let page='home';
+function nav(){document.getElementById('nav').innerHTML=tabs.map(x=>`<button class="${page===x[0]?'active':''}" onclick="go('${x[0]}')"><div style="font-size:18px">${x[2]}</div>${x[1]}</button>`).join('')}
+function go(p){page=p;render()}
+function count(k){return db[k].length}
+function render(){nav();const a=document.getElementById('app');a.innerHTML=views[page]();bind()}
+const views={
+home:()=>`<h2>Resumen</h2><div class="grid">
+<div class="stat"><span>Glucosa</span><b>${count('glucose')}</b><span class="muted">registros</span></div>
+<div class="stat"><span>Medicación</span><b>${count('meds')}</b><span class="muted">registros</span></div>
+<div class="stat"><span>Alimentación</span><b>${count('food')}</b><span class="muted">registros</span></div>
+<div class="stat"><span>Actividad</span><b>${count('activity')}</b><span class="muted">registros</span></div>
+<div class="stat"><span>Citas/pruebas</span><b>${count('appointments')}</b><span class="muted">registros</span></div>
+<div class="stat"><span>Documentos</span><b>${count('documents')}</b><span class="muted">archivos</span></div></div>
+<div class="card"><b>Última glucosa</b><p>${db.glucose[0]?`${esc(db.glucose[0].value)} ${esc(db.glucose[0].unit)} · ${esc(db.glucose[0].context)}<br><span class="muted">${fmt(db.glucose[0].date)}</span>`:'Sin registros todavía.'}</p></div>
+<div class="card"><b>Importante</b><p class="muted">Esta aplicación sirve para registrar y consultar información personal. No calcula dosis de insulina ni recomienda tratamientos.</p></div>`,
+glucose:()=>`<div class="card"><h2>Registrar glucosa</h2><form id="gf"><div class="row"><div><label>Valor</label><input id="gv" type="number" step="0.1" required></div><div><label>Unidad</label><select id="gu"><option>mg/dL</option><option>mmol/L</option></select></div></div><label>Momento</label><select id="gc"><option>En ayunas</option><option>Antes de comer</option><option>Después de comer</option><option>Antes de dormir</option><option>Otro</option></select><button>Guardar</button></form></div>
+<div class="card"><h2>Historial</h2>${list('glucose',x=>`<b>${esc(x.value)} ${esc(x.unit)}</b> · ${esc(x.context)}<br><span class="muted">${fmt(x.date)}</span>`,'glucosa')}</div>`,
+records:()=>`<div class="card"><h2>Medicaciones</h2><form id="mf"><input id="mt" placeholder="Medicamento registrado" required><button>Guardar</button></form>${list('meds',x=>`${esc(x.text)}<br><span class="muted">${fmt(x.date)}</span>`,'medicación')}</div>
+<div class="card"><h2>Alimentación</h2><form id="ff"><input id="ft" placeholder="Comida o bebida" required><button>Guardar</button></form>${list('food',x=>`${esc(x.text)}<br><span class="muted">${fmt(x.date)}</span>`,'alimentación')}</div>
+<div class="card"><h2>Actividad física</h2><form id="af"><input id="at" placeholder="Actividad realizada" required><button>Guardar</button></form>${list('activity',x=>`${esc(x.text)}<br><span class="muted">${fmt(x.date)}</span>`,'actividad')}</div>`,
+agenda:()=>`<div class="card"><h2>Agenda médica</h2><form id="apf"><input id="apt" placeholder="Endocrinología, analítica, revisión..." required><input id="apd" type="datetime-local" required><button>Guardar</button></form>${list('appointments',x=>`<b>${esc(x.text)}</b><br><span class="muted">${fmt(x.date)}</span>`,'cita')}</div>`,
+docs:()=>`<div class="card"><h2>Documentos médicos</h2><p class="muted">Puedes guardar informes y resultados en este dispositivo.</p><input id="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp"><button onclick="addDoc()">Añadir documento</button></div><div class="card">${db.documents.length?db.documents.map((x,i)=>`<div class="item"><div><b>${esc(x.name)}</b><br><span class="muted">${fmt(x.date)}</span></div><button class="danger" onclick="del('documents',${i})">Eliminar</button></div>`).join(''):'<div class="empty">No hay documentos.</div>'}</div>`,
+settings:()=>`<div class="card"><h2>Perfil</h2><form id="pf"><input id="pn" placeholder="Nombre" value="${esc(db.profile.name||'')}"><input id="pb" placeholder="Fecha de nacimiento" type="date" value="${esc(db.profile.birth||'')}"><button>Guardar perfil</button></form></div>
+<div class="card"><h2>Datos</h2><button class="secondary" onclick="exportData()">Exportar datos</button> <button class="danger" onclick="clearAll()">Borrar todos los datos</button></div>
+<div class="card"><b>GlucoControl</b><p class="muted">Versión web funcional. Los datos se almacenan localmente en este dispositivo.</p></div>`
+};
+function fmt(d){return new Date(d).toLocaleString('es-ES',{dateStyle:'short',timeStyle:'short'})}
+function list(k,fn,label){if(!db[k].length)return `<div class="empty">No hay registros de ${label}.</div>`;return db[k].map((x,i)=>`<div class="item"><div>${fn(x)}</div><button class="danger" onclick="del('${k}',${i})">Eliminar</button></div>`).join('')}
+function del(k,i){db[k].splice(i,1);save();render();toast('Registro eliminado')}
+function bind(){
+ document.getElementById('gf')?.addEventListener('submit',e=>{e.preventDefault();db.glucose.unshift({value:gv.value,unit:gu.value,context:gc.value,date:new Date().toISOString()});save();render();toast('Glucosa guardada')});
+ document.getElementById('mf')?.addEventListener('submit',e=>{e.preventDefault();db.meds.unshift({text:mt.value,date:new Date().toISOString()});save();render();toast('Medicación guardada')});
+ document.getElementById('ff')?.addEventListener('submit',e=>{e.preventDefault();db.food.unshift({text:ft.value,date:new Date().toISOString()});save();render();toast('Alimentación guardada')});
+ document.getElementById('af')?.addEventListener('submit',e=>{e.preventDefault();db.activity.unshift({text:at.value,date:new Date().toISOString()});save();render();toast('Actividad guardada')});
+ document.getElementById('apf')?.addEventListener('submit',e=>{e.preventDefault();db.appointments.unshift({text:apt.value,date:new Date(apd.value).toISOString()});save();render();toast('Cita guardada')});
+ document.getElementById('pf')?.addEventListener('submit',e=>{e.preventDefault();db.profile={name:pn.value,birth:pb.value};save();toast('Perfil guardado')});
+}
+async function addDoc(){const f=document.getElementById('file').files[0];if(!f)return toast('Selecciona un archivo');const reader=new FileReader();reader.onload=()=>{db.documents.unshift({name:f.name,type:f.type,data:reader.result,date:new Date().toISOString()});save();render();toast('Documento guardado')};reader.readAsDataURL(f)}
+function exportData(){const b=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='GlucoControl_datos.json';a.click()}
+function clearAll(){if(confirm('¿Borrar todos los datos de GlucoControl?')){db={glucose:[],meds:[],food:[],activity:[],appointments:[],documents:[],profile:{}};save();render()}}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+render();
+</script>
+</body>
+</html>
